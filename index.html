@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <title>Lotte Cinema Photocard Upscaling</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <style>
+        :root {
+            --bg: #050816;
+            --bg-soft: #0f172a;
+            --card-bg: #020617;
+            --accent: #38bdf8;
+            --accent-soft: rgba(56, 189, 248, 0.15);
+            --text-main: #e5e7eb;
+            --text-sub: #9ca3af;
+            --border-soft: rgba(148, 163, 184, 0.3);
+            --radius-lg: 18px;
+            --radius-md: 999px;
+            --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.9);
+            --transition: 180ms ease-out;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top, #1d283a 0, #020617 50%, #000 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .app {
+            width: 100%;
+            max-width: 960px;
+        }
+
+        .card {
+            background: linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
+            border-radius: 24px;
+            padding: 24px 24px 20px;
+            box-shadow: var(--shadow-soft);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            backdrop-filter: blur(14px);
+        }
+
+        @media (min-width: 768px) {
+            .card {
+                padding: 28px 28px 22px;
+            }
+        }
+
+        .header {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .badge-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .app-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: var(--radius-md);
+            background: radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.26), rgba(15, 23, 42, 0.8));
+            border: 1px solid rgba(56, 189, 248, 0.5);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #e0f2fe;
+        }
+
+        .app-pill-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #22c55e;
+            box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.22);
+        }
+
+        .target-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(148, 163, 184, 0.5);
+            background: rgba(15, 23, 42, 0.9);
+            font-size: 11px;
+            color: var(--text-sub);
+            white-space: nowrap;
+        }
+
+        .target-pill b {
+            color: #f97316;
+            font-weight: 600;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 650;
+            letter-spacing: 0.02em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        h1 span.accent {
+            background: linear-gradient(135deg, #38bdf8, #a855f7);
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: var(--text-sub);
+        }
+
+        .subtitle b {
+            color: #e5e7eb;
+            font-weight: 600;
+        }
+
+        /* Controls */
+
+        .controls {
+            margin-top: 18px;
+            padding: 14px 14px 12px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-soft);
+            background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.15), rgba(15, 23, 42, 0.95));
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        @media (min-width: 640px) {
+            .controls {
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+            }
+        }
+
+        .file-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 100%;
+        }
+
+        @media (min-width: 640px) {
+            .file-group {
+                max-width: 380px;
+            }
+        }
+
+        .file-label {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: #9ca3af;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            border-radius: var(--radius-md);
+            border: 1px dashed rgba(148, 163, 184, 0.7);
+            background: rgba(15, 23, 42, 0.9);
+            padding: 7px 10px;
+            cursor: pointer;
+            transition: border-color var(--transition), background var(--transition), transform var(--transition);
+        }
+
+        .file-input-wrapper:hover {
+            border-color: var(--accent);
+            background: rgba(15, 23, 42, 1);
+            transform: translateY(-1px);
+        }
+
+        .file-input-wrapper span.icon {
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+        }
+
+        .file-input-wrapper span.text-main {
+            font-size: 0.86rem;
+            color: #e5e7eb;
+        }
+
+        .file-input-wrapper span.text-sub {
+            font-size: 0.78rem;
+            color: #9ca3af;
+        }
+
+        #fileInput {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-name {
+            font-size: 0.8rem;
+            color: #9ca3af;
+            min-height: 1em;
+        }
+
+        .button-group {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-start;
+        }
+
+        .btn {
+            border-radius: var(--radius-md);
+            border: none;
+            font-size: 0.86rem;
+            padding: 8px 16px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            transition: background var(--transition), transform var(--transition), box-shadow var(--transition), opacity var(--transition);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #38bdf8, #a855f7);
+            color: #0b1120;
+            box-shadow: 0 12px 25px rgba(56, 189, 248, 0.35);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 35px rgba(56, 189, 248, 0.55);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.4;
+            cursor: default;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--text-sub);
+            border: 1px solid var(--border-soft);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(15, 23, 42, 1);
+            transform: translateY(-1px);
+        }
+
+        /* Layout bottom */
+
+        .body-grid {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+        }
+
+        @media (min-width: 800px) {
+            .body-grid {
+                grid-template-columns: 1.1fr 1fr;
+            }
+        }
+
+        .panel {
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(31, 41, 55, 0.9);
+            background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.8), rgba(2, 6, 23, 0.95));
+            padding: 12px 12px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.82rem;
+            color: var(--text-sub);
+        }
+
+        .panel-header span.title {
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-size: 0.76rem;
+            color: #9ca3af;
+        }
+
+        .panel-header span.chip {
+            padding: 3px 8px;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(148, 163, 184, 0.5);
+            font-size: 0.72rem;
+            color: #9ca3af;
+        }
+
+        .preview-box {
+            border-radius: 14px;
+            background: #020617;
+            border: 1px solid rgba(15, 23, 42, 0.9);
+            padding: 8px;
+            min-height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        img.preview-img {
+            max-width: 100%;
+            max-height: 260px;
+            height: auto;
+            border-radius: 12px;
+            border: 1px solid rgba(30, 64, 175, 0.5);
+            object-fit: contain;
+            background: black;
+        }
+
+        .preview-placeholder {
+            font-size: 0.78rem;
+            color: #4b5563;
+            text-align: center;
+        }
+
+        .log {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            background: #020617;
+            border-radius: 12px;
+            padding: 8px 10px;
+            border: 1px solid rgba(31, 41, 55, 0.9);
+            min-height: 2.2em;
+            white-space: pre-line;
+        }
+
+        .footer {
+            margin-top: 12px;
+            font-size: 0.7rem;
+            color: #6b7280;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="card">
+        <header class="header">
+            <div class="badge-row">
+                <div class="app-pill">
+                    <span class="app-pill-dot"></span>
+                    <span>LOTTE CINEMA PHOTOCARD UPSCALING</span>
+                </div>
+                <div class="target-pill">
+                    Target size&nbsp; <b>≥ 250KB</b>
+                </div>
+            </div>
+            <h1>
+                <span class="accent">Photocard</span> Upscaling Tool
+            </h1>
+            <p class="subtitle">
+                롯데시네마 포토카드 이미지를 업로드하면, 프론트엔드에서만 처리해서
+                <b>250KB 이상</b>의 새 이미지 파일로 만들어 줍니다. (GitHub Pages용, BE 없음)
+            </p>
+        </header>
+
+        <!-- Controls -->
+        <section class="controls">
+            <div class="file-group">
+                <span class="file-label">1 · Upload photocard image</span>
+
+                <label class="file-input-wrapper">
+                    <span class="icon">＋</span>
+                    <div>
+                        <span class="text-main">Choose image file</span><br />
+                        <span class="text-sub">JPG / PNG · local only · no server upload</span>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*" />
+                </label>
+                <div class="file-name" id="fileName"></div>
+            </div>
+
+            <div class="button-group">
+                <button id="processBtn" class="btn btn-primary" disabled>
+                    ⚙️ Upscale to ≥ 250KB
+                </button>
+                <a id="downloadLink" class="btn btn-secondary" href="#" download="resized.jpg" style="display:none;">
+                    ⬇️ Download result
+                </a>
+            </div>
+        </section>
+
+        <!-- Body grid -->
+        <section class="body-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="title">Original</span>
+                    <span class="chip" id="originalInfo">No file</span>
+                </div>
+                <div class="preview-box">
+                    <img id="originalPreview" class="preview-img" style="display:none;" />
+                    <div class="preview-placeholder" id="originalPlaceholder">
+                        업로드한 이미지가 여기 미리보기로 표시됩니다.
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="title">Upscaled result</span>
+                    <span class="chip" id="resultInfo">Waiting…</span>
+                </div>
+                <div class="preview-box">
+                    <img id="resultPreview" class="preview-img" style="display:none;" />
+                    <div class="preview-placeholder" id="resultPlaceholder">
+                        변환을 실행하면 결과 이미지가 표시됩니다.
+                    </div>
+                </div>
+                <div class="log" id="log"></div>
+            </div>
+        </section>
+
+        <div class="footer">
+            FE-only · Client-side canvas &amp; JPEG re-encode · No images are uploaded to any server.
+        </div>
+    </div>
+</div>
+
+<script>
+    const TARGET_SIZE = 250 * 1024; // 250KB
+
+    const fileInput = document.getElementById('fileInput');
+    const fileNameEl = document.getElementById('fileName');
+    const processBtn = document.getElementById('processBtn');
+    const logEl = document.getElementById('log');
+    const originalPreview = document.getElementById('originalPreview');
+    const resultPreview = document.getElementById('resultPreview');
+    const originalPlaceholder = document.getElementById('originalPlaceholder');
+    const resultPlaceholder = document.getElementById('resultPlaceholder');
+    const downloadLink = document.getElementById('downloadLink');
+    const originalInfo = document.getElementById('originalInfo');
+    const resultInfo = document.getElementById('resultInfo');
+
+    let currentFile = null;
+
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        currentFile = file;
+
+        fileNameEl.textContent = file.name + ` · ${(file.size / 1024).toFixed(1)} KB`;
+        originalInfo.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+        resultInfo.textContent = 'Waiting…';
+
+        const url = URL.createObjectURL(file);
+        originalPreview.src = url;
+        originalPreview.style.display = 'block';
+        originalPlaceholder.style.display = 'none';
+
+        resultPreview.src = '';
+        resultPreview.style.display = 'none';
+        resultPlaceholder.style.display = 'block';
+
+        downloadLink.style.display = 'none';
+        logEl.textContent = 'Ready. Click "Upscale to ≥ 250KB".';
+
+        processBtn.disabled = false;
+    });
+
+    processBtn.addEventListener('click', async () => {
+        if (!currentFile) return;
+
+        processBtn.disabled = true;
+        processBtn.textContent = '⏳ Processing...';
+        resultInfo.textContent = 'Processing…';
+        resultPlaceholder.style.display = 'block';
+        resultPreview.style.display = 'none';
+        downloadLink.style.display = 'none';
+        logEl.textContent = '처리 중...';
+
+        try {
+            const resultBlob = await makeAtLeastSize(currentFile, TARGET_SIZE);
+            const resultUrl = URL.createObjectURL(resultBlob);
+
+            resultPreview.src = resultUrl;
+            resultPreview.style.display = 'block';
+            resultPlaceholder.style.display = 'none';
+
+            downloadLink.href = resultUrl;
+            downloadLink.style.display = 'inline-flex';
+            downloadLink.download = 'resized-' + (currentFile.name || 'image.jpg');
+
+            resultInfo.textContent = `${(resultBlob.size / 1024).toFixed(1)} KB`;
+            logEl.textContent += `\n변환 완료 ✔️`;
+        } catch (err) {
+            console.error(err);
+            logEl.textContent = '에러 발생: ' + err.message;
+            resultInfo.textContent = 'Error';
+        } finally {
+            processBtn.disabled = !currentFile;
+            processBtn.textContent = '⚙️ Upscale to ≥ 250KB';
+        }
+    });
+
+    function loadImageFromFile(file) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    function canvasEncode(img, width, height, quality = 0.9) {
+        return new Promise((resolve, reject) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob) return reject(new Error('Blob 생성 실패'));
+                    resolve(blob);
+                },
+                'image/jpeg',
+                quality
+            );
+        });
+    }
+
+    async function makeAtLeastSize(file, targetBytes) {
+        const img = await loadImageFromFile(file);
+
+        let scale = 1;
+        let blob = await canvasEncode(img, img.width, img.height, 0.9);
+        logEl.textContent = `초기 인코딩: ${(blob.size / 1024).toFixed(1)} KB`;
+
+        // 안전장치: 최대 6번 정도만 시도
+        for (let i = 0; i < 6 && blob.size < targetBytes; i++) {
+            const factor = Math.sqrt(targetBytes / blob.size) * 1.1; // 여유 있게 약간 더
+            scale *= factor;
+
+            const newW = Math.round(img.width * scale);
+            const newH = Math.round(img.height * scale);
+
+            blob = await canvasEncode(img, newW, newH, 0.9);
+            logEl.textContent += `\n[시도 ${i + 1}] ${newW}x${newH} → ${(blob.size / 1024).toFixed(1)} KB`;
+        }
+
+        if (blob.size < targetBytes) {
+            logEl.textContent += '\n⚠️ 여러 번 시도했지만 250KB에 살짝 못 미칠 수 있습니다.';
+        }
+
+        return blob;
+    }
+</script>
+</body>
+</html>

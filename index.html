@@ -138,6 +138,39 @@
             font-weight: 600;
         }
 
+        .mode-switch {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .mode-button {
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            background: rgba(15, 23, 42, 0.88);
+            color: #cbd5e1;
+            border-radius: var(--radius-md);
+            padding: 9px 14px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            transition: transform var(--transition), border-color var(--transition), background var(--transition), color var(--transition), box-shadow var(--transition);
+        }
+
+        .mode-button:hover {
+            transform: translateY(-1px);
+            border-color: rgba(56, 189, 248, 0.7);
+            color: #eff6ff;
+        }
+
+        .mode-button.is-active {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.24), rgba(168, 85, 247, 0.26));
+            color: #f8fafc;
+            border-color: rgba(56, 189, 248, 0.85);
+            box-shadow: 0 10px 24px rgba(56, 189, 248, 0.16);
+        }
+
         /* Controls */
 
         .controls {
@@ -439,31 +472,36 @@
             <div class="badge-row">
                 <div class="app-pill">
                     <span class="app-pill-dot"></span>
-                    <span>LOTTE CINEMA PHOTOCARD UPSCALING</span>
+                    <span>LOTTE CINEMA PHOTOCARD TOOL</span>
                 </div>
                 <div class="target-pill">
-                    Target size&nbsp; <b>≥ 250KB</b>
+                    <span id="targetLabel">Target size</span>&nbsp; <b id="targetValue">≥ 250KB</b>
                 </div>
             </div>
             <h1>
-                <span class="accent">Photocard</span> Upscaling Tool
+                <span class="accent">Photocard</span> Image Tool
             </h1>
-            <p class="subtitle">
+            <p class="subtitle" id="pageSubtitle">
                 롯데시네마 포토카드 이미지를 업로드하면, 프론트엔드에서만 처리해서
                 <b>250KB 이상</b>의 새 이미지 파일로 만들어 줍니다. (GitHub Pages용, BE 없음)
             </p>
+            <div class="mode-switch" id="modeSwitch">
+                <button type="button" class="mode-button is-active" data-mode="upscale">Auto Upscale</button>
+                <button type="button" class="mode-button" data-mode="crop">1537:2370 Crop</button>
+                <button type="button" class="mode-button" data-mode="allInOne">All-in-One</button>
+            </div>
         </header>
 
         <!-- Controls -->
         <section class="controls">
             <div class="file-group">
-                <span class="file-label">1 · Upload up to 3 photocard images</span>
+                <span class="file-label" id="fileLabel">1 · Upload up to 3 photocard images</span>
 
                 <label class="file-input-wrapper">
                     <span class="icon">＋</span>
                     <div>
-                        <span class="text-main">Choose image files</span><br />
-                        <span class="text-sub">JPG / PNG · max 3 files · auto upscale · local only</span>
+                        <span class="text-main" id="uploadMain">Choose image files</span><br />
+                        <span class="text-sub" id="uploadSub">JPG / PNG · max 3 files · auto upscale · local only</span>
                     </div>
                     <input type="file" id="fileInput" accept="image/*" multiple />
                 </label>
@@ -475,7 +513,7 @@
         <section class="body-grid">
             <div class="panel">
                 <div class="panel-header">
-                    <span class="title">Upscaled result</span>
+                    <span class="title" id="resultTitle">Upscaled result</span>
                     <span class="chip" id="resultInfo">Waiting…</span>
                 </div>
                 <div id="resultGrid" class="result-grid">
@@ -488,7 +526,7 @@
         </section>
 
         <div class="footer">
-            FE-only · Client-side canvas &amp; JPEG re-encode · No images are uploaded to any server.
+            FE-only · Client-side canvas processing &amp; JPEG export · No images are uploaded to any server.
         </div>
     </div>
 </div>
@@ -496,17 +534,144 @@
 <script>
     const TARGET_SIZE = 250 * 1024; // 250KB
     const MAX_FILES = 3;
+    const CROP_RATIO = 1537 / 2370;
 
     const fileInput = document.getElementById('fileInput');
     const fileNameEl = document.getElementById('fileName');
     const logEl = document.getElementById('log');
     const resultGrid = document.getElementById('resultGrid');
     const resultInfo = document.getElementById('resultInfo');
+    const pageSubtitleEl = document.getElementById('pageSubtitle');
+    const targetLabelEl = document.getElementById('targetLabel');
+    const targetValueEl = document.getElementById('targetValue');
+    const fileLabelEl = document.getElementById('fileLabel');
+    const uploadMainEl = document.getElementById('uploadMain');
+    const uploadSubEl = document.getElementById('uploadSub');
+    const resultTitleEl = document.getElementById('resultTitle');
+    const modeButtons = Array.from(document.querySelectorAll('.mode-button'));
 
     let activeBatchId = 0;
+    let currentMode = 'upscale';
     let resultUrls = [];
 
+    const MODES = {
+        upscale: {
+            subtitle: '롯데시네마 포토카드 이미지를 업로드하면, 프론트엔드에서만 처리해서 <b>250KB 이상</b>의 새 이미지 파일로 만들어 줍니다. (GitHub Pages용, BE 없음)',
+            targetLabel: 'Target size',
+            targetValue: '≥ 250KB',
+            fileLabel: '1 · Upload up to 3 photocard images',
+            uploadMain: 'Choose image files',
+            uploadSub: 'JPG / PNG · max 3 files · auto upscale · local only',
+            resultTitle: 'Upscaled result',
+            emptyState: '이미지를 최대 3장까지 업로드하면 자동으로 업스케일 결과가 표시됩니다.',
+            preparingState: '이미지를 준비 중입니다...',
+            waitingLog: '업로드를 기다리는 중입니다.',
+            ignoredStartLog: `최대 ${MAX_FILES}장까지 처리할 수 있어 앞의 ${MAX_FILES}장만 자동 업스케일합니다.`,
+            startLog(count) {
+                return `${count}개 이미지 업로드 감지. 자동 업스케일을 시작합니다.`;
+            },
+            batchHeader(ignoredCount) {
+                return ignoredCount > 0
+                    ? `최대 ${MAX_FILES}장 기준으로 자동 업스케일 중`
+                    : '자동 업스케일 진행 중';
+            },
+            processingPlaceholder: '업스케일 처리 중...',
+            buildDownloadName(file) {
+                return buildDownloadName('upscaled', file);
+            },
+            async processFile(file, onProgress) {
+                const blob = await makeAtLeastSize(file, TARGET_SIZE, onProgress);
+
+                return {
+                    blob,
+                    statusText: formatKB(blob.size),
+                    completeMessage: `변환 완료 (${formatKB(blob.size)})`
+                };
+            }
+        },
+        crop: {
+            subtitle: '업로드한 이미지를 프론트엔드에서만 처리해서 <b>1537x2370 비율</b>로 자동 크롭합니다. 세로는 유지하고 가로 좌우만 잘라 맞춥니다.',
+            targetLabel: 'Target ratio',
+            targetValue: '1537:2370',
+            fileLabel: '1 · Upload up to 3 photocard images',
+            uploadMain: 'Choose image files',
+            uploadSub: 'JPG / PNG · max 3 files · auto crop · left/right trim only',
+            resultTitle: 'Cropped result',
+            emptyState: '이미지를 최대 3장까지 업로드하면 1537:2370 비율로 자동 크롭한 결과가 표시됩니다.',
+            preparingState: '크롭할 이미지를 준비 중입니다...',
+            waitingLog: '업로드를 기다리는 중입니다.',
+            ignoredStartLog: `최대 ${MAX_FILES}장까지 처리할 수 있어 앞의 ${MAX_FILES}장만 자동 크롭합니다.`,
+            startLog(count) {
+                return `${count}개 이미지 업로드 감지. 자동 크롭을 시작합니다.`;
+            },
+            batchHeader(ignoredCount) {
+                return ignoredCount > 0
+                    ? `최대 ${MAX_FILES}장 기준으로 자동 크롭 중`
+                    : '1537:2370 자동 크롭 진행 중';
+            },
+            processingPlaceholder: '좌우 크롭 처리 중...',
+            buildDownloadName(file) {
+                return buildDownloadName('cropped-1537x2370', file);
+            },
+            async processFile(file, onProgress) {
+                const result = await cropToTargetRatio(file, CROP_RATIO, onProgress);
+
+                return {
+                    blob: result.blob,
+                    statusText: `${result.width}x${result.height}`,
+                    completeMessage: `크롭 완료 (${result.width}x${result.height})`
+                };
+            }
+        },
+        allInOne: {
+            subtitle: '업로드한 이미지를 먼저 <b>1537x2370 비율</b>로 좌우 크롭한 뒤, 이어서 <b>250KB 이상</b>이 되도록 자동 업스케일합니다.',
+            targetLabel: 'Target flow',
+            targetValue: '1537:2370 + ≥ 250KB',
+            fileLabel: '1 · Upload up to 3 photocard images',
+            uploadMain: 'Choose image files',
+            uploadSub: 'JPG / PNG · max 3 files · auto crop + upscale · local only',
+            resultTitle: 'All-in-One result',
+            emptyState: '이미지를 최대 3장까지 업로드하면 1537:2370 크롭 후 자동 업스케일까지 완료한 결과가 표시됩니다.',
+            preparingState: '올인원 처리할 이미지를 준비 중입니다...',
+            waitingLog: '업로드를 기다리는 중입니다.',
+            ignoredStartLog: `최대 ${MAX_FILES}장까지 처리할 수 있어 앞의 ${MAX_FILES}장만 올인원 처리합니다.`,
+            startLog(count) {
+                return `${count}개 이미지 업로드 감지. 자동 크롭 + 업스케일을 시작합니다.`;
+            },
+            batchHeader(ignoredCount) {
+                return ignoredCount > 0
+                    ? `최대 ${MAX_FILES}장 기준으로 올인원 처리 중`
+                    : '1537:2370 크롭 후 자동 업스케일 진행 중';
+            },
+            processingPlaceholder: '크롭 후 업스케일 처리 중...',
+            buildDownloadName(file) {
+                return buildDownloadName('all-in-one', file);
+            },
+            async processFile(file, onProgress) {
+                const cropped = await cropToTargetRatio(file, CROP_RATIO, (message) => {
+                    onProgress(`[1/2 크롭] ${message}`);
+                });
+                const blob = await makeAtLeastSize(cropped.blob, TARGET_SIZE, (message) => {
+                    onProgress(`[2/2 업스케일] ${message}`);
+                });
+
+                return {
+                    blob,
+                    statusText: `${cropped.width}x${cropped.height} · ${formatKB(blob.size)}`,
+                    completeMessage: `크롭 + 업스케일 완료 (${cropped.width}x${cropped.height}, ${formatKB(blob.size)})`
+                };
+            }
+        }
+    };
+
+    modeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            setMode(button.dataset.mode);
+        });
+    });
+
     fileInput.addEventListener('change', async (e) => {
+        const mode = MODES[currentMode];
         const selectedFiles = Array.from(e.target.files || [])
             .filter((file) => file.type.startsWith('image/'));
         fileInput.value = '';
@@ -518,12 +683,12 @@
 
         fileNameEl.textContent = buildSelectionSummary(files, ignoredCount);
         resultInfo.textContent = 'Preparing…';
-        renderEmptyState('이미지를 준비 중입니다...');
+        renderEmptyState(mode.preparingState);
         logEl.textContent = ignoredCount > 0
-            ? `최대 ${MAX_FILES}장까지 처리할 수 있어 앞의 ${MAX_FILES}장만 자동 업스케일합니다.`
-            : `${files.length}개 이미지 업로드 감지. 자동 업스케일을 시작합니다.`;
+            ? mode.ignoredStartLog
+            : mode.startLog(files.length);
 
-        await processFiles(files, ignoredCount);
+        await processFiles(files, mode, ignoredCount);
     });
 
     function formatKB(bytes) {
@@ -539,14 +704,43 @@
             : base;
     }
 
-    function buildDownloadName(file) {
+    function buildDownloadName(prefix, file) {
         const baseName = (file.name || 'image').replace(/\.[^.]+$/, '');
-        return `upscaled-${baseName}.jpg`;
+        return `${prefix}-${baseName}.jpg`;
     }
 
     function clearResultUrls() {
         resultUrls.forEach((url) => URL.revokeObjectURL(url));
         resultUrls = [];
+    }
+
+    function setMode(modeKey) {
+        if (!MODES[modeKey] || modeKey === currentMode) return;
+
+        currentMode = modeKey;
+        activeBatchId += 1;
+        fileNameEl.textContent = '';
+        resultInfo.textContent = 'Waiting…';
+
+        applyModeCopy();
+        renderEmptyState(MODES[currentMode].emptyState);
+        logEl.textContent = MODES[currentMode].waitingLog;
+    }
+
+    function applyModeCopy() {
+        const mode = MODES[currentMode];
+
+        pageSubtitleEl.innerHTML = mode.subtitle;
+        targetLabelEl.textContent = mode.targetLabel;
+        targetValueEl.textContent = mode.targetValue;
+        fileLabelEl.textContent = mode.fileLabel;
+        uploadMainEl.textContent = mode.uploadMain;
+        uploadSubEl.textContent = mode.uploadSub;
+        resultTitleEl.textContent = mode.resultTitle;
+
+        modeButtons.forEach((button) => {
+            button.classList.toggle('is-active', button.dataset.mode === currentMode);
+        });
     }
 
     function renderEmptyState(message) {
@@ -612,7 +806,7 @@
         return { card, status, image, placeholder, download };
     }
 
-    async function processFiles(files, ignoredCount = 0) {
+    async function processFiles(files, mode, ignoredCount = 0) {
         const batchId = ++activeBatchId;
         clearResultUrls();
         resultGrid.innerHTML = '';
@@ -632,23 +826,21 @@
             const card = cards[index];
 
             card.status.textContent = '처리 중...';
-            card.placeholder.textContent = '업스케일 처리 중...';
+            card.placeholder.textContent = mode.processingPlaceholder;
             resultInfo.textContent = `${successCount} / ${files.length} 완료`;
 
             const prefix = `${index + 1}/${files.length} · ${file.name}`;
-            const batchHeader = ignoredCount > 0
-                ? `최대 ${MAX_FILES}장 기준으로 자동 업스케일 중`
-                : '자동 업스케일 진행 중';
+            const batchHeader = mode.batchHeader(ignoredCount);
 
             try {
-                const resultBlob = await makeAtLeastSize(file, TARGET_SIZE, (message) => {
+                const result = await mode.processFile(file, (message) => {
                     if (batchId !== activeBatchId) return;
                     logEl.textContent = `${batchHeader}\n${prefix}\n${message}`;
                 });
 
                 if (batchId !== activeBatchId) return;
 
-                const resultUrl = URL.createObjectURL(resultBlob);
+                const resultUrl = URL.createObjectURL(result.blob);
                 resultUrls.push(resultUrl);
 
                 card.image.src = resultUrl;
@@ -656,13 +848,13 @@
                 card.placeholder.style.display = 'none';
 
                 card.download.href = resultUrl;
-                card.download.download = buildDownloadName(file);
+                card.download.download = mode.buildDownloadName(file);
                 card.download.style.display = 'inline-flex';
 
-                card.status.textContent = formatKB(resultBlob.size);
+                card.status.textContent = result.statusText;
                 successCount += 1;
                 resultInfo.textContent = `${successCount} / ${files.length} 완료`;
-                logEl.textContent = `${batchHeader}\n${prefix}\n변환 완료 (${formatKB(resultBlob.size)})`;
+                logEl.textContent = `${batchHeader}\n${prefix}\n${result.completeMessage}`;
             } catch (err) {
                 console.error(err);
                 card.status.textContent = '실패';
@@ -714,6 +906,36 @@
         });
     }
 
+    function canvasCropEncode(img, sourceX, sourceY, sourceWidth, sourceHeight, outputWidth, outputHeight, quality = 0.95) {
+        return new Promise((resolve, reject) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = outputWidth;
+            canvas.height = outputHeight;
+            const ctx = canvas.getContext('2d');
+
+            ctx.drawImage(
+                img,
+                sourceX,
+                sourceY,
+                sourceWidth,
+                sourceHeight,
+                0,
+                0,
+                outputWidth,
+                outputHeight
+            );
+
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob) return reject(new Error('Blob 생성 실패'));
+                    resolve(blob);
+                },
+                'image/jpeg',
+                quality
+            );
+        });
+    }
+
     async function makeAtLeastSize(file, targetBytes, onProgress = () => {}) {
         const img = await loadImageFromFile(file);
 
@@ -739,6 +961,48 @@
 
         return blob;
     }
+
+    async function cropToTargetRatio(file, targetRatio, onProgress = () => {}) {
+        const img = await loadImageFromFile(file);
+        const targetWidth = Math.round(img.height * targetRatio);
+
+        onProgress(`원본 크기: ${img.width}x${img.height}`);
+
+        if (img.width < targetWidth) {
+            throw new Error('이미지 가로폭이 목표 비율보다 좁아서 좌우 크롭만으로는 만들 수 없습니다.');
+        }
+
+        const totalCrop = img.width - targetWidth;
+        const cropLeft = Math.floor(totalCrop / 2);
+        const cropRight = totalCrop - cropLeft;
+
+        if (totalCrop === 0) {
+            onProgress('이미 이미 1537:2370 비율입니다. 세로는 그대로 유지한 채 다시 저장합니다.');
+        } else {
+            onProgress(`세로 ${img.height}px는 유지하고, 좌 ${cropLeft}px / 우 ${cropRight}px씩 잘라 ${targetWidth}x${img.height}로 맞춥니다.`);
+        }
+
+        const blob = await canvasCropEncode(
+            img,
+            cropLeft,
+            0,
+            targetWidth,
+            img.height,
+            targetWidth,
+            img.height,
+            0.95
+        );
+
+        return {
+            blob,
+            width: targetWidth,
+            height: img.height
+        };
+    }
+
+    applyModeCopy();
+    renderEmptyState(MODES[currentMode].emptyState);
+    logEl.textContent = MODES[currentMode].waitingLog;
 </script>
 </body>
 </html>

@@ -463,9 +463,9 @@
                 이미지를 업로드하면 <b>250KB 이상</b>의 새 이미지 파일로 만들어 줍니다.
             </p>
             <div class="mode-switch" id="modeSwitch">
-                <button type="button" class="mode-button is-active" data-mode="upscale">🚀 Auto Upscale</button>
+                <button type="button" class="mode-button is-active" data-mode="allInOne">🪄 All-in-One</button>
+                <button type="button" class="mode-button" data-mode="upscale">🚀 Auto Upscale</button>
                 <button type="button" class="mode-button" data-mode="crop">✂️ 1537:2370 Crop</button>
-                <button type="button" class="mode-button" data-mode="allInOne">🪄 All-in-One</button>
             </div>
         </header>
 
@@ -512,7 +512,7 @@
     const modeButtons = Array.from(document.querySelectorAll('.mode-button'));
 
     let activeBatchId = 0;
-    let currentMode = 'upscale';
+    let currentMode = 'allInOne';
     let resultUrls = [];
 
     const MODES = {
